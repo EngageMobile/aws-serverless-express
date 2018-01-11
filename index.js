@@ -18,16 +18,25 @@ const url = require('url')
 const binarycase = require('binary-case')
 
 function getPathWithQueryStringParams(event) {
-  return url.format({ pathname: event.path, query: event.queryStringParameters })
+    return url.format({ pathname: event.path, query: event.queryStringParameters })
 }
 
 function getContentType(params) {
-  // only compare mime type; ignore encoding part
-  return params.contentTypeHeader ? params.contentTypeHeader.split(';')[0] : ''
+    // only compare mime type; ignore encoding part
+    return params.contentTypeHeader ? params.contentTypeHeader.split(';')[0] : ''
 }
 
 function isContentTypeBinaryMimeType(params) {
-  return params.binaryMimeTypes.indexOf(params.contentType) !== -1
+    return params.binaryMimeTypes.indexOf(params.contentType) !== -1
+}
+
+let globalContext = null
+
+function millisRemaining() {
+    if(!globalContext) {
+        throw new Error('Tried to get time remaining when there was no context')
+    }
+    return globalContext.getTimeRemainingInMillis()
 }
 
 function mapApiGatewayEventToHttpRequest(event, context, socketPath) {
@@ -50,7 +59,7 @@ function mapApiGatewayEventToHttpRequest(event, context, socketPath) {
     }
 }
 
-function forwardResponseToApiGateway(server, response, context) {
+function forwardResponseToApiGateway(server, response, context, callback) {
     let buf = []
 
     response
@@ -79,16 +88,23 @@ function forwardResponseToApiGateway(server, response, context) {
                     }
                 })
 
-            const contentType = getContentType({ contentTypeHeader: headers['content-type'] })
-            const isBase64Encoded = isContentTypeBinaryMimeType({ contentType, binaryMimeTypes: server._binaryTypes })
+            const contentType = getContentType({contentTypeHeader: headers['content-type']})
+            const isBase64Encoded = isContentTypeBinaryMimeType({contentType, binaryMimeTypes: server._binaryTypes})
             const body = bodyBuffer.toString(isBase64Encoded ? 'base64' : 'utf8')
             const successResponse = {statusCode, body, headers, isBase64Encoded}
 
-            context.succeed(successResponse)
+            console.log(`Calling callback with:`, successResponse)
+            callback(null, successResponse)
+            server.close()
+            globalContext = null
+
+            // console.log(`Calling context.succeed with:`, successResponse)
+            // context.succeed(successResponse)
         })
+
 }
 
-function forwardConnectionErrorResponseToApiGateway(server, error, context) {
+function forwardConnectionErrorResponseToApiGateway(server, error, context, callback) {
     console.log('ERROR: aws-serverless-express connection error')
     console.error(error)
     const errorResponse = {
@@ -97,10 +113,11 @@ function forwardConnectionErrorResponseToApiGateway(server, error, context) {
         headers: {}
     }
 
-    context.succeed(errorResponse)
+    callback(null, errorResponse)
+    globalContext = null
 }
 
-function forwardLibraryErrorResponseToApiGateway(server, error, context) {
+function forwardLibraryErrorResponseToApiGateway(server, error, context, callback) {
     console.log('ERROR: aws-serverless-express error')
     console.error(error)
     const errorResponse = {
@@ -109,13 +126,15 @@ function forwardLibraryErrorResponseToApiGateway(server, error, context) {
         headers: {}
     }
 
-    context.succeed(errorResponse)
+    callback(null, errorResponse)
+    globalContext = null
 }
 
-function forwardRequestToNodeServer(server, event, context) {
+function forwardRequestToNodeServer(server, event, context, callback) {
+    globalContext = context
     try {
         const requestOptions = mapApiGatewayEventToHttpRequest(event, context, getSocketPath(server._socketPathSuffix))
-        const req = http.request(requestOptions, (response, body) => forwardResponseToApiGateway(server, response, context))
+        const req = http.request(requestOptions, (response, body) => forwardResponseToApiGateway(server, response, context, callback))
         if (event.body) {
             if (event.isBase64Encoded) {
                 event.body = new Buffer(event.body, 'base64')
@@ -124,12 +143,12 @@ function forwardRequestToNodeServer(server, event, context) {
             req.write(event.body)
         }
 
-        req.on('error', (error) => forwardConnectionErrorResponseToApiGateway(server, error, context))
-        .end()
+        req.on('error', (error) => forwardConnectionErrorResponseToApiGateway(server, error, context, callback))
+            .end()
     } catch (error) {
-       forwardLibraryErrorResponseToApiGateway(server, error, context)
-       return server
-   }
+        forwardLibraryErrorResponseToApiGateway(server, error, context, callback)
+        return server
+    }
 }
 
 function startServer(server) {
@@ -148,37 +167,38 @@ function createServer (requestListener, serverListenCallback, binaryTypes) {
     server.on('listening', () => {
         server._isListening = true
 
-        if (serverListenCallback) serverListenCallback()
-    })
+    if (serverListenCallback) serverListenCallback()
+})
     server.on('close', () => {
         server._isListening = false
-    })
-    .on('error', (error) => {
+})
+.on('error', (error) => {
         if (error.code === 'EADDRINUSE') {
-            console.warn(`WARNING: Attempting to listen on socket ${getSocketPath(server._socketPathSuffix)}, but it is already in use. This is likely as a result of a previous invocation error or timeout. Check the logs for the invocation(s) immediately prior to this for root cause, and consider increasing the timeout and/or cpu/memory allocation if this is purely as a result of a timeout. aws-serverless-express will restart the Node.js server listening on a new port and continue with this request.`)
-            ++server._socketPathSuffix
-            return server.close(() => startServer(server))
-        }
+        console.warn(`WARNING: Attempting to listen on socket ${getSocketPath(server._socketPathSuffix)}, but it is already in use. This is likely as a result of a previous invocation error or timeout. Check the logs for the invocation(s) immediately prior to this for root cause, and consider increasing the timeout and/or cpu/memory allocation if this is purely as a result of a timeout. aws-serverless-express will restart the Node.js server listening on a new port and continue with this request.`)
+        ++server._socketPathSuffix
+        return server.close(() => startServer(server))
+    }
 
-        console.log('ERROR: server error')
-        console.error(error)
-    })
+    console.log('ERROR: server error')
+    console.error(error)
+})
 
     return server
 }
 
-function proxy(server, event, context) {
+function proxy(server, event, context, callback) {
     if (server._isListening) {
-      forwardRequestToNodeServer(server, event, context)
-      return server
+        forwardRequestToNodeServer(server, event, context, callback)
+        return server
     } else {
         return startServer(server)
-        .on('listening', () => proxy(server, event, context))
+            .on('listening', () => proxy(server, event, context, callback))
     }
 }
 
 exports.createServer = createServer
 exports.proxy = proxy
+exports.millisRemaining = millisRemaining
 
 if (process.env.NODE_ENV === 'test') {
     exports.getPathWithQueryStringParams = getPathWithQueryStringParams
