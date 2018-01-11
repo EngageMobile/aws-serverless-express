@@ -34,10 +34,10 @@ let globalContext = null
 
 function millisRemaining() {
     let returnValue = 0
-    if(globalContext) {
-        console.log('Tried to get time remaining when there was no context')
-    } else {
+    if(!globalContext) {
         returnValue = globalContext.getRemainingTimeInMillis()
+    } else {
+        console.log('Tried to get time remaining when there was no context')
     }
     return returnValue
 }
