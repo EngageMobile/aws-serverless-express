@@ -36,7 +36,7 @@ function millisRemaining() {
     if(!globalContext) {
         throw new Error('Tried to get time remaining when there was no context')
     }
-    return globalContext.getTimeRemainingInMillis()
+    return globalContext.getRemainingTimeInMillis()
 }
 
 function mapApiGatewayEventToHttpRequest(event, context, socketPath) {
