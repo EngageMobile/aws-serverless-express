@@ -42,6 +42,14 @@ function millisRemaining() {
     return returnValue
 }
 
+function runAfterWebReturn() {
+    if(globalContext) {
+        globalContext.callbackWaitsForEmptyEventLoop = true
+    } else {
+        console.log('Tried to call runAfterWebReturn with not context')
+    }
+}
+
 function mapApiGatewayEventToHttpRequest(event, context, socketPath) {
     const headers = event.headers || {} // NOTE: Mutating event.headers; prefer deep clone of event.headers
     const eventWithoutBody = Object.assign({}, event)
@@ -98,7 +106,11 @@ function forwardResponseToApiGateway(server, response, context, callback) {
 
             console.log(`Calling callback with:`, successResponse)
             callback(null, successResponse)
-            server.close()
+            if(globalContext.callbackWaitsForEmptyEventLoop) {
+                //If we don't close our server here, the lambda will run to the full timeout. Closing this means that
+                //our next call will take extra time (~10s) so we only want to close it when we have to
+                server.close()
+            }
             globalContext = null
 
             // console.log(`Calling context.succeed with:`, successResponse)
@@ -134,6 +146,7 @@ function forwardLibraryErrorResponseToApiGateway(server, error, context, callbac
 }
 
 function forwardRequestToNodeServer(server, event, context, callback) {
+    context.callbackWaitsForEmptyEventLoop = false
     globalContext = context
     try {
         const requestOptions = mapApiGatewayEventToHttpRequest(event, context, getSocketPath(server._socketPathSuffix))
