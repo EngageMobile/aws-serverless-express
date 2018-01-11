@@ -33,10 +33,13 @@ function isContentTypeBinaryMimeType(params) {
 let globalContext = null
 
 function millisRemaining() {
-    if(!globalContext) {
-        throw new Error('Tried to get time remaining when there was no context')
+    let returnValue = 0
+    if(globalContext) {
+        console.log('Tried to get time remaining when there was no context')
+    } else {
+        returnValue = globalContext.getRemainingTimeInMillis()
     }
-    return globalContext.getRemainingTimeInMillis()
+    return returnValue
 }
 
 function mapApiGatewayEventToHttpRequest(event, context, socketPath) {
