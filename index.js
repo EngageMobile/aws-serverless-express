@@ -215,7 +215,7 @@ function proxy(server, event, context, callback) {
 exports.createServer = createServer
 exports.proxy = proxy
 exports.millisRemaining = millisRemaining
-
+exports.runAfterWebReturn = runAfterWebReturn
 if (process.env.NODE_ENV === 'test') {
     exports.getPathWithQueryStringParams = getPathWithQueryStringParams
     exports.mapApiGatewayEventToHttpRequest = mapApiGatewayEventToHttpRequest
