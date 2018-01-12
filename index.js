@@ -51,6 +51,9 @@ function runAfterWebReturn() {
 }
 
 function mapApiGatewayEventToHttpRequest(event, context, socketPath) {
+
+    console.log('Converting event', event)
+
     const headers = event.headers || {} // NOTE: Mutating event.headers; prefer deep clone of event.headers
     const eventWithoutBody = Object.assign({}, event)
     delete eventWithoutBody.body
