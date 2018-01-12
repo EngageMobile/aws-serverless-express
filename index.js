@@ -111,6 +111,7 @@ function forwardResponseToApiGateway(server, response, context, callback) {
                 //our next call will take extra time (~10s) so we only want to close it when we have to
                 server.close()
             }
+            console.log('Response sent, clearing context')
             globalContext = null
 
             // console.log(`Calling context.succeed with:`, successResponse)
@@ -129,6 +130,7 @@ function forwardConnectionErrorResponseToApiGateway(server, error, context, call
     }
 
     callback(null, errorResponse)
+    console.log('Connection error, clearing context')
     globalContext = null
 }
 
@@ -142,11 +144,13 @@ function forwardLibraryErrorResponseToApiGateway(server, error, context, callbac
     }
 
     callback(null, errorResponse)
+    console.log('Library error, clearing context')
     globalContext = null
 }
 
 function forwardRequestToNodeServer(server, event, context, callback) {
     context.callbackWaitsForEmptyEventLoop = false
+    console.log(`Intitialize request to: ${context}`)
     globalContext = context
     try {
         const requestOptions = mapApiGatewayEventToHttpRequest(event, context, getSocketPath(server._socketPathSuffix))
