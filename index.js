@@ -109,6 +109,7 @@ function forwardResponseToApiGateway(server, response, context, callback) {
             if(context.callbackWaitsForEmptyEventLoop) {
                 //If we don't close our server here, the lambda will run to the full timeout. Closing this means that
                 //our next call will take extra time (~10s) so we only want to close it when we have to
+                console.log(`Request ${context.awsRequestId} needs to run over, closing server`)
                 server.close()
             }
             console.log(`Response sent, clearing context for request: ${globalContext && globalContext.awsRequestId || 'no context'}`)
