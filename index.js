@@ -104,14 +104,15 @@ function forwardResponseToApiGateway(server, response, context, callback) {
             const body = bodyBuffer.toString(isBase64Encoded ? 'base64' : 'utf8')
             const successResponse = {statusCode, body, headers, isBase64Encoded}
 
-            console.log(`Calling callback with:`, successResponse)
-            callback(null, successResponse)
             if(context.callbackWaitsForEmptyEventLoop) {
                 //If we don't close our server here, the lambda will run to the full timeout. Closing this means that
                 //our next call will take extra time (~10s) so we only want to close it when we have to
                 console.log(`Request ${context.awsRequestId} needs to run over, closing server`)
                 server.close()
             }
+            console.log(`Calling callback with:`, successResponse)
+            callback(null, successResponse)
+
             console.log(`Response sent, clearing context for request: ${globalContext && globalContext.awsRequestId || 'no context'}`)
             globalContext = null
 
